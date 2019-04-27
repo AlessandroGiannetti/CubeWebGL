@@ -1,32 +1,181 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="eng">
+<head>
+    <title>HW1</title>
+    <style>
+        input[type="range"] {
+            -webkit-appearance: none;
+            background-color: #ddd;
+            height: 10px;
+            width: 250px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            background-color: #666;
+            height: 28px;
+            opacity: 0.6;
+            width: 10px;
+        }
+        input[type="range"]::-moz-range-thumb {
+            background-color: #666;
+            border-radius: 0;
+            border: none;
+            height: 28px;
+            opacity: 0.6;
+            width: 10px;
+        }
+
+        input[type="range"]::-moz-range-track {
+            background: #ddd;
+            border: none;
+        }
+        button{
+            position: relative;
+            width: 80%;
+            height: 30px;
+            background-color: #a3A3A3;
+            color: black;
+            border: none;
+            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        label{
+            width: 50px;
+            display: inline-block;
+            text-align: right;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<label for="Theta">Theta: </label>   -4.9<input type="range" id="Theta" min="-4.9" max="4.9" step="0.00001" value="0" >4.9
+<label for="R">Radius: </label>   2.5<input type="range" id="R" min="2.5" max="3.5" step="0.00001" value="3" >3.5
+<label for="near">Near: </label>  0.5<input id="near" type="range" min="0.5" max="3.7" step="0.01" value="0.5"/>3.7
+<label for="far">Far: </label> 0.6<input id="far" type="range" min="0.6" max="4.5" step="0.01" value="4.5"/>4.5
+<br><br>
+<label for="Phi">Phi: </label>   -4.9<input type="range" id="Phi" min="-4.9" max="4.9" step="0.00001" value="0" >4.9
+<label for="scaler">Scale: </label>   0.8<input type="range" id="scaler" min="0.8" max="1.1" step="0.01" value="0.95" >1.1
+<label for="Transl_X_slider">Tr X: </label>   -0.5<input id="Transl_X_slider" type="range" min="-0.5" max="0.5" step="0.01" value="0"/>0.5
+<label for="Transl_Y_slider">Tr Y: </label>    -0.5<input id="Transl_Y_slider" type="range" min="-0.5" max="0.5" step="0.01" value="0"/>0.5
+<label for="Transl_Z_slider">Tr Z: </label>    -0.5<input id="Transl_Z_slider" type="range" min="-0.5" max="0.5" step="0.01" value="0"/>0.5
+<div style="margin: 0 auto; width: 800px;">
+    <br>
+    <button id="Button_Light">Phong/Gouraud</button>
+</div>
+<br>
 
 <script id="vertex-shader" type="x-shader/x-vertex">
 
+uniform bool togl_light_flag;
 attribute  vec4 vPosition;
+attribute vec3 vNormal;
 attribute  vec4 vColor;
+attribute  vec2 vTexCoord;
+uniform vec3 eye;
+varying vec2 fTexCoord;
+varying vec3 N, L, E;
+varying vec3 N_goru, L_goru, E_goru;
 
+uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+uniform vec4 lightPosition;
+uniform float shininess;
 varying vec4 fColor;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform mat4 scaleMatrix;
+uniform mat4 translationMatrix;
 
 void main()
 {
-    fColor = vColor;
-    gl_Position = vPosition;
+     vec3 pos = (translationMatrix*scaleMatrix*vPosition).xyz;
+
+    //fixed light position
+    vec3 light = lightPosition.xyz;
+    vec3 L = normalize( light - pos );
+    vec3 E = normalize( eye - pos );
+    vec3 H = normalize( L + E );
+
+    vec4 NN = vec4(vNormal,0);
+
+    // Transform vertex normal into eye coordinates
+    vec3 N = normalize((translationMatrix*scaleMatrix*NN).xyz);
+
+    if(togl_light_flag){
+
+        // Compute terms in the illumination equation
+        vec4 ambient = ambientProduct;
+
+        float Kd = max( dot(L, N), 0.0 );
+        vec4  diffuse = Kd*diffuseProduct;
+
+        float Ks = pow( max(dot(N, H), 0.0), shininess );
+        vec4  specular = Ks * specularProduct;
+
+        if( dot(L, N) < 0.0 ) {
+            specular = vec4(0.0, 0.0, 0.0, 1.0);
+        }
+        fColor = vColor;
+        fColor = ambient + diffuse + specular;
+
+        fColor.a = 1.0;
+    } else {
+        L_goru = L;
+        N_goru = N;
+        E_goru = E;
+    }
+
+    fTexCoord = vTexCoord;
+
+    gl_Position = ((projectionMatrix*modelViewMatrix*scaleMatrix*translationMatrix*vPosition));
 }
+
 </script>
 
 <script id="fragment-shader" type="x-shader/x-fragment">
 
 precision mediump float;
+uniform bool togl_light_flag;
+
+uniform vec4 goru_ambient_product;
+uniform vec4 goru_diffuse_product;
+uniform vec4 goru_specular_product;
+uniform float goru_shininess;
+varying vec3 N_goru, L_goru, E_goru;
 
 varying vec4 fColor;
+varying  vec2 fTexCoord;
+
+uniform sampler2D Tex0;
+uniform sampler2D Tex1;
 
 void
 main()
 {
-    gl_FragColor = fColor;
+    if(togl_light_flag){
+
+        gl_FragColor = fColor*(texture2D(Tex0, fTexCoord)*texture2D(Tex1, fTexCoord));
+
+    } else {
+       vec4 goru_fColor;
+       vec3 H = normalize( L_goru + E_goru );
+       vec4 ambient = goru_ambient_product;
+       float Kd = max( dot(L_goru, N_goru), 0.0 );
+       vec4 diffuse = Kd * goru_diffuse_product;
+       float Ks = pow(max(dot(N_goru, H), 0.0), goru_shininess);
+       vec4 specular = Ks * goru_specular_product;
+       if( dot(L_goru, N_goru) < 0.0 ) {
+          specular = vec4(0.0, 0.0, 0.0, 1.0);
+       }
+       goru_fColor = ambient + diffuse + specular;
+       goru_fColor.a = 1.0;
+       gl_FragColor = goru_fColor*(texture2D(Tex0, fTexCoord)*texture2D(Tex1, fTexCoord));
+    }
 
 }
+
 </script>
 
 <script type="text/javascript" src="Common/webgl-utils.js"></script>
@@ -35,8 +184,8 @@ main()
 <script type="text/javascript" src="homework1.js"></script>
 
 <body>
-<canvas id="gl-canvas" width="1024" height="1024">
-Oops ... your browser doesn't support the HTML5 canvas element
+<canvas id="gl-canvas" width="1900" height="830">
+    Oops ... your browser doesn't support the HTML5 canvas element
 </canvas>
 </body>
 </html>
